@@ -222,7 +222,11 @@
                                             Array.from({ length: activeGroupCount }).map((_, i) => (
                                                 <span key={i} className="animate-[fadeIn_0.3s_ease-in]">
                                                     {dotsPerGroup}
-                                                    {i < activeGroupCount - 1 ? ' + ' : (activeGroupCount === groups ? ' = ?' : '')}
+                                                    {i < activeGroupCount - 1 
+                                                        ? ' + ' 
+                                                        : (activeGroupCount === groups 
+                                                            ? (feedback === 'correct' ? ` = ${groups * dotsPerGroup}` : ' = ?') 
+                                                            : '')}
                                                 </span>
                                             ))
                                         )}
