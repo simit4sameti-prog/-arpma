@@ -1,378 +1,395 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, RefreshCw, CheckCircle, XCircle } from 'lucide-react';
-
-const App = () => {
-  const [groups, setGroups] = useState(3); // Kaç tane grup (domino) var (Çarpan 1)
-  const [dotsPerGroup, setDotsPerGroup] = useState(4); // Her grupta kaç nokta var (Çarpan 2)
-  const [userAnswer, setUserAnswer] = useState('');
-  const [feedback, setFeedback] = useState(null); // 'correct', 'wrong', null
-  const [score, setScore] = useState(0);
-  const [activeDots, setActiveDots] = useState({}); // Hangi noktaların yandığını takip eder
-  
-  // Sayı doğrusu kapsayıcısının boyutlarını takip etmek için ref ve state
-  const containerRef = useRef(null);
-  const [dimensions, setDimensions] = useState({ width: 1200, height: 144 });
-
-  // Yeni soru oluşturma (Maksimum çarpım 50 olacak şekilde)
-  const generateNewQuestion = () => {
-    // 1 ile 9 arasında rastgele sayılar seç, çarpım 50'yi geçmesin
-    let newGroups, newDots;
-    do {
-      newGroups = Math.floor(Math.random() * 8) + 2; // 2 ile 9 arası grup
-      newDots = Math.floor(Math.random() * 9) + 1;   // 1 ile 9 arası nokta
-    } while (newGroups * newDots > 50);
-
-    setGroups(newGroups);
-    setDotsPerGroup(newDots);
-    setUserAnswer('');
-    setFeedback(null);
-    setActiveDots({}); // Noktaları sıfırla
-  };
-
-  // İlk açılışta soru üret ve ekran boyutunu dinle
-  useEffect(() => {
-    generateNewQuestion();
-
-    const updateSize = () => {
-      if (containerRef.current) {
-        setDimensions({
-          width: containerRef.current.offsetWidth,
-          height: containerRef.current.offsetHeight
-        });
-      }
-    };
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Domino Matematik</title>
     
-    window.addEventListener('resize', updateSize);
-    updateSize(); // Initial check
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
     
-    return () => window.removeEventListener('resize', updateSize);
-  }, []);
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel (JSX'i tarayıcıda çalıştırmak için) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  // Noktaya tıklama işlemi
-  const toggleDot = (e, groupId, dotId) => {
-    e.stopPropagation(); 
-    const key = `${groupId}-${dotId}`;
-    setActiveDots(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
-
-  // Tüm grubu (domino taşını) aç/kapa
-  const toggleGroup = (groupId) => {
-    let allActive = true;
-    for (let i = 0; i < dotsPerGroup; i++) {
-      if (!activeDots[`${groupId}-${i}`]) {
-        allActive = false;
-        break;
-      }
-    }
-    const newActiveDots = { ...activeDots };
-    for (let i = 0; i < dotsPerGroup; i++) {
-      newActiveDots[`${groupId}-${i}`] = !allActive;
-    }
-    setActiveDots(newActiveDots);
-  };
-
-  // Aktif (tıklanmış/yanmış) grup sayısını hesapla
-  const getActiveGroupCount = () => {
-    let count = 0;
-    for (let i = 0; i < groups; i++) {
-      if (activeDots[`${i}-0`]) {
-        count++;
-      }
-    }
-    return count;
-  };
-
-  const activeGroupCount = getActiveGroupCount();
-  const currentTotal = activeGroupCount * dotsPerGroup; // O anki toplam sayı
-
-  // Cevabı kontrol et
-  const checkAnswer = () => {
-    const correctAnswer = groups * dotsPerGroup;
-    if (parseInt(userAnswer) === correctAnswer) {
-      setFeedback('correct');
-      setScore(s => s + 10);
-    } else {
-      setFeedback('wrong');
-    }
-  };
-
-  // Enter tuşu ile kontrol
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      checkAnswer();
-    }
-  };
-
-  // --- OK YOLU HESAPLAMALARI (ZIPLAYAN OKLAR) ---
-  const calculateJumpPaths = () => {
-    if (activeGroupCount === 0) return [];
-
-    const paths = [];
-    const svgWidth = dimensions.width;
-    const svgHeight = dimensions.height;
-    const axisY = svgHeight * 0.6; // Y ekseni hizası
-
-    for (let i = 0; i < activeGroupCount; i++) {
-      const startVal = i * dotsPerGroup;
-      const endVal = (i + 1) * dotsPerGroup;
-
-      // X koordinatlarını hesapla (0-50 arası değerleri genişliğe oranla)
-      const startX = startVal === 0 ? svgWidth * 0.005 : svgWidth * (startVal / 50);
-      const endX = svgWidth * (endVal / 50);
-
-      // Kontrol noktası (kavis için)
-      const controlX = (startX + endX) / 2;
-      // Kavis yüksekliği
-      const jumpHeight = 50; 
-      const controlY = axisY - jumpHeight;
-
-      // Quadratic Bezier Curve
-      const path = `M ${startX} ${axisY} Q ${controlX} ${controlY} ${endX} ${axisY}`;
-      paths.push(path);
-    }
-    return paths;
-  };
-
-  const jumpPaths = calculateJumpPaths();
-
-  return (
-    <div className="min-h-screen bg-blue-50 font-sans p-4 md:p-8">
-      <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-xl overflow-hidden border-4 border-blue-200">
-        
-        {/* Başlık ve Skor Alanı */}
-        <div className="bg-blue-600 p-6 text-white flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-              <Sparkles className="text-yellow-300" />
-              Domino Matematik
-            </h1>
-            <p className="text-blue-100 text-sm mt-1">Tekrarlı toplama ile çarpmayı keşfet!</p>
-          </div>
-          <div className="bg-blue-800 px-4 py-2 rounded-lg font-mono text-xl">
-            Puan: {score}
-          </div>
-        </div>
-
-        <div className="p-6 space-y-8">
-
-          {/* 3. Bölüm (Artık En Üstte): İşlem ve Cevap (Matematiksel Temsil) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-            
-            {/* Tekrarlı Toplama Gösterimi - Dinamik */}
-            <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200 text-center min-h-[100px] flex flex-col justify-center">
-              <span className="text-sm text-gray-500 block mb-2">Tekrarlı Toplama (Tıkladıkça Yazılır)</span>
-              <div className="text-xl font-mono text-gray-700 font-bold overflow-x-auto whitespace-nowrap px-2">
-                {activeGroupCount === 0 ? (
-                  <span className="text-gray-400 italic text-base">Başlamak için domino taşlarına tıkla...</span>
-                ) : (
-                  Array.from({ length: activeGroupCount }).map((_, i) => (
-                    <span key={i} className="animate-[fadeIn_0.3s_ease-in]">
-                      {dotsPerGroup}
-                      {i < activeGroupCount - 1 ? ' + ' : (activeGroupCount === groups ? ' = ?' : '')}
-                    </span>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Çarpma İşlemi Alanı */}
-            <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-200 flex flex-col items-center">
-              <span className="text-sm text-indigo-500 block mb-3 font-semibold">Çarpma İşlemi Olarak Yaz</span>
-              
-              <div className="flex items-center gap-3 text-2xl font-bold text-gray-800 flex-wrap justify-center">
-                <span className="bg-white px-3 py-1 rounded shadow-sm text-indigo-600">{groups}</span>
-                <span className="text-gray-400">x</span>
-                <span className="bg-white px-3 py-1 rounded shadow-sm text-indigo-600">{dotsPerGroup}</span>
-                <span className="text-gray-400">=</span>
-                
-                <input 
-                  type="number" 
-                  value={userAnswer}
-                  onChange={(e) => setUserAnswer(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  className={`w-20 p-2 text-center border-2 rounded-lg outline-none transition-all ${
-                    feedback === 'correct' ? 'border-green-500 bg-green-50 text-green-700' :
-                    feedback === 'wrong' ? 'border-red-500 bg-red-50' :
-                    'border-indigo-300 focus:border-indigo-500'
-                  }`}
-                  placeholder="?"
-                />
-              </div>
-
-              <div className="mt-4 flex gap-3 w-full">
-                <button 
-                  onClick={checkAnswer}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-semibold shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
-                >
-                  Kontrol Et
-                </button>
-                {feedback && (
-                  <button 
-                    onClick={generateNewQuestion}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors"
-                    title="Yeni Soru"
-                  >
-                    <RefreshCw size={20} />
-                  </button>
-                )}
-              </div>
-            </div>
-
-          </div>
-          
-          {/* 1. Bölüm: Domino Taşları (Görsel Temsil) */}
-          <div className="bg-gray-100 p-6 rounded-2xl border-2 border-gray-200">
-            <h3 className="text-gray-600 font-semibold mb-4 flex items-center gap-2">
-              <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
-              Domino taşlarındaki noktaları saymak için üzerlerine tıkla!
-            </h3>
-            
-            <div className="flex flex-wrap justify-center gap-4 md:gap-8">
-              {Array.from({ length: groups }).map((_, gIndex) => {
-                const isGroupActive = activeDots[`${gIndex}-0`];
-                return (
-                  <div key={gIndex} className="relative group">
-                    <div 
-                      onClick={() => toggleGroup(gIndex)}
-                      className={`w-24 h-36 bg-white rounded-xl shadow-[0_4px_0_0_rgba(0,0,0,0.1)] border-2 flex items-center justify-center hover:translate-y-[-2px] transition-all duration-200 cursor-pointer active:scale-95 ${
-                        isGroupActive ? 'border-yellow-400 ring-2 ring-yellow-200' : 'border-gray-300'
-                      }`}
-                    >
-                      <div className="grid grid-cols-2 gap-3 p-2">
-                        {Array.from({ length: dotsPerGroup }).map((_, dIndex) => {
-                          const isActive = activeDots[`${gIndex}-${dIndex}`];
-                          return (
-                            <button
-                              key={dIndex}
-                              onClick={(e) => toggleDot(e, gIndex, dIndex)}
-                              className={`w-6 h-6 rounded-full border-2 transition-all duration-300 transform scale-100 active:scale-90 ${
-                                isActive 
-                                  ? 'bg-yellow-400 border-yellow-500 shadow-[0_0_10px_rgba(250,204,21,0.6)]' 
-                                  : 'bg-gray-200 border-gray-300'
-                              }`}
-                              aria-label="Nokta"
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div className={`absolute -bottom-8 left-0 right-0 text-center font-bold transition-colors ${isGroupActive ? 'text-blue-600' : 'text-gray-300'}`}>
-                      {dotsPerGroup}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 2. Bölüm: Sayı Doğrusu (Model Temsili) */}
-          <div className="bg-white p-4 rounded-xl border-2 border-dashed border-blue-300 overflow-x-auto">
-             <h3 className="text-gray-600 font-semibold mb-2 flex items-center gap-2">
-              <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>
-              İlerleme Sayı Doğrusunda Nasıl Görünüyor? (Tıkladıkça Zıplayan Oklar)
-            </h3>
-            
-            {/* Sayı Doğrusu Container */}
-            <div 
-              ref={containerRef}
-              className="min-w-[1200px] h-36 relative flex items-end pb-6"
-            >
-              
-              <svg className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{zIndex: 10}}>
-                <defs>
-                  <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-                    <polygon points="0 0, 6 3, 0 6" fill="#EF4444" />
-                  </marker>
-                </defs>
-
-                {/* Zıplayan Oklar Listesi (Döngü ile oluşturuluyor) */}
-                {jumpPaths.map((pathD, index) => (
-                  <path 
-                    key={index}
-                    d={pathD}
-                    fill="none"
-                    stroke="#EF4444"
-                    strokeWidth="4"
-                    markerEnd="url(#arrowhead)"
-                    strokeLinecap="round"
-                    className="animate-[fadeIn_0.5s_ease-out]"
-                  />
-                ))}
-
-                {/* Ok üzerindeki +N etiketleri */}
-                {Array.from({ length: activeGroupCount }).map((_, i) => {
-                  const startPercent = (i * dotsPerGroup) * (100 / 50); 
-                  const endPercent = ((i + 1) * dotsPerGroup) * (100 / 50);
-                  
-                  return (
-                    <text 
-                      key={i}
-                      x={`${(startPercent + endPercent) / 2}%`} 
-                      y="55%" 
-                      textAnchor="middle" 
-                      fill="#EF4444" 
-                      fontSize="12" 
-                      fontWeight="bold"
-                      className="animate-[fadeIn_0.5s_ease-out]"
-                    >
-                      +{dotsPerGroup}
-                    </text>
-                  );
-                })}
-              </svg>
-
-              {/* Sayı Doğrusu Tikleri (0, 1, 2... 50) */}
-              <div className="w-full flex justify-between absolute bottom-0 border-t-2 border-gray-800 pt-1">
-                {Array.from({ length: 51 }).map((_, i) => (
-                  <div key={i} className="flex flex-col items-center relative" style={{ width: '20px' }}>
-                    <div className={`absolute -top-1 w-0.5 bg-gray-800 ${i % 5 === 0 ? 'h-3' : 'h-1.5'}`}></div>
-                    
-                    <span className={`text-[10px] text-gray-600 font-mono mt-2 ${
-                      i === currentTotal ? 'font-bold text-red-600 text-base scale-125 transition-all' : 
-                      (i % 5 === 0 ? 'font-bold text-black' : '')
-                    }`}>
-                      {i}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Geri Bildirim Mesajı */}
-          {feedback && (
-            <div className={`p-4 rounded-xl flex items-center justify-center gap-3 text-lg font-bold animate-pulse ${
-              feedback === 'correct' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-            }`}>
-              {feedback === 'correct' ? (
-                <>
-                  <CheckCircle />
-                  Harika! {groups} tane {dotsPerGroup}, {groups * dotsPerGroup} eder.
-                </>
-              ) : (
-                <>
-                  <XCircle />
-                  Tekrar dene! Domino taşlarını sayabilirsin.
-                </>
-              )}
-            </div>
-          )}
-
-        </div>
-      </div>
-      
-      {/* Özel Animasyonlar için Style */}
-      <style>{`
+    <!-- Özel Animasyonlar -->
+    <style>
         @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(5px); }
-          to { opacity: 1; transform: translateY(0); }
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-      `}</style>
-    </div>
-  );
-};
+    </style>
+</head>
+<body class="bg-blue-50">
+    <div id="root"></div>
 
-export default App;
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- İKONLAR (Inline SVG olarak) ---
+        const Sparkles = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 5H5"/><path d="M19 17v4"/><path d="M23 19h-4"/></svg>
+        );
+        const RefreshCw = ({ size, className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size || 24} height={size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+        );
+        const CheckCircle = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+        );
+        const XCircle = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+        );
+
+        // --- ANA UYGULAMA ---
+        const App = () => {
+            const [groups, setGroups] = useState(3);
+            const [dotsPerGroup, setDotsPerGroup] = useState(4);
+            const [userAnswer, setUserAnswer] = useState('');
+            const [feedback, setFeedback] = useState(null);
+            const [score, setScore] = useState(0);
+            const [activeDots, setActiveDots] = useState({});
+            
+            const containerRef = useRef(null);
+            const [dimensions, setDimensions] = useState({ width: 0, height: 144 });
+
+            const generateNewQuestion = () => {
+                let newGroups, newDots;
+                do {
+                    newGroups = Math.floor(Math.random() * 8) + 2; 
+                    newDots = Math.floor(Math.random() * 9) + 1;   
+                } while (newGroups * newDots > 50);
+
+                setGroups(newGroups);
+                setDotsPerGroup(newDots);
+                setUserAnswer('');
+                setFeedback(null);
+                setActiveDots({});
+            };
+
+            useEffect(() => {
+                generateNewQuestion();
+
+                if (!containerRef.current) return;
+
+                const resizeObserver = new ResizeObserver((entries) => {
+                    for (let entry of entries) {
+                        if (entry.contentRect) {
+                            setDimensions({
+                                width: entry.contentRect.width,
+                                height: entry.contentRect.height || 144
+                            });
+                        }
+                    }
+                });
+
+                resizeObserver.observe(containerRef.current);
+
+                return () => {
+                    resizeObserver.disconnect();
+                };
+            }, []);
+
+            const toggleDot = (e, groupId, dotId) => {
+                e.stopPropagation(); 
+                const key = `${groupId}-${dotId}`;
+                setActiveDots(prev => ({
+                    ...prev,
+                    [key]: !prev[key]
+                }));
+            };
+
+            const toggleGroup = (groupId) => {
+                let allActive = true;
+                for (let i = 0; i < dotsPerGroup; i++) {
+                    if (!activeDots[`${groupId}-${i}`]) {
+                        allActive = false;
+                        break;
+                    }
+                }
+                const newActiveDots = { ...activeDots };
+                for (let i = 0; i < dotsPerGroup; i++) {
+                    newActiveDots[`${groupId}-${i}`] = !allActive;
+                }
+                setActiveDots(newActiveDots);
+            };
+
+            const getActiveGroupCount = () => {
+                let count = 0;
+                for (let i = 0; i < groups; i++) {
+                    if (activeDots[`${i}-0`]) {
+                        count++;
+                    }
+                }
+                return count;
+            };
+
+            const activeGroupCount = getActiveGroupCount();
+            const currentTotal = activeGroupCount * dotsPerGroup;
+
+            const checkAnswer = () => {
+                const correctAnswer = groups * dotsPerGroup;
+                if (parseInt(userAnswer) === correctAnswer) {
+                    setFeedback('correct');
+                    setScore(s => s + 10);
+                } else {
+                    setFeedback('wrong');
+                }
+            };
+
+            const handleKeyDown = (e) => {
+                if (e.key === 'Enter') {
+                    checkAnswer();
+                }
+            };
+
+            const calculateJumpPaths = () => {
+                if (activeGroupCount === 0 || dimensions.width === 0) return [];
+
+                const paths = [];
+                const svgWidth = dimensions.width;
+                const svgHeight = dimensions.height;
+                const axisY = svgHeight * 0.6;
+
+                for (let i = 0; i < activeGroupCount; i++) {
+                    const startVal = i * dotsPerGroup;
+                    const endVal = (i + 1) * dotsPerGroup;
+
+                    const startX = startVal === 0 ? svgWidth * 0.005 : svgWidth * (startVal / 50);
+                    const endX = svgWidth * (endVal / 50);
+
+                    const controlX = (startX + endX) / 2;
+                    const jumpHeight = 50; 
+                    const controlY = axisY - jumpHeight;
+
+                    const path = `M ${startX} ${axisY} Q ${controlX} ${controlY} ${endX} ${axisY}`;
+                    paths.push(path);
+                }
+                return paths;
+            };
+
+            const jumpPaths = calculateJumpPaths();
+
+            return (
+                <div className="min-h-screen bg-blue-50 font-sans p-4 md:p-8">
+                    <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-xl overflow-hidden border-4 border-blue-200">
+                        
+                        {/* Başlık ve Skor */}
+                        <div className="bg-blue-600 p-6 text-white flex justify-between items-center">
+                            <div>
+                                <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
+                                    <Sparkles className="text-yellow-300" />
+                                    Domino Matematik
+                                </h1>
+                                <p className="text-blue-100 text-sm mt-1">Tekrarlı toplama ile çarpmayı keşfet!</p>
+                            </div>
+                            <div className="bg-blue-800 px-4 py-2 rounded-lg font-mono text-xl">
+                                Puan: {score}
+                            </div>
+                        </div>
+
+                        <div className="p-6 space-y-8">
+                            
+                            {/* İŞLEM BÖLÜMÜ (EN ÜSTTE) */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                                {/* Tekrarlı Toplama */}
+                                <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200 text-center min-h-[100px] flex flex-col justify-center">
+                                    <span className="text-sm text-gray-500 block mb-2">Tekrarlı Toplama (Tıkladıkça Yazılır)</span>
+                                    <div className="text-xl font-mono text-gray-700 font-bold overflow-x-auto whitespace-nowrap px-2">
+                                        {activeGroupCount === 0 ? (
+                                            <span className="text-gray-400 italic text-base">Başlamak için domino taşlarına tıkla...</span>
+                                        ) : (
+                                            Array.from({ length: activeGroupCount }).map((_, i) => (
+                                                <span key={i} className="animate-[fadeIn_0.3s_ease-in]">
+                                                    {dotsPerGroup}
+                                                    {i < activeGroupCount - 1 ? ' + ' : (activeGroupCount === groups ? ' = ?' : '')}
+                                                </span>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Çarpma İşlemi */}
+                                <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-200 flex flex-col items-center">
+                                    <span className="text-sm text-indigo-500 block mb-3 font-semibold">Çarpma İşlemi Olarak Yaz</span>
+                                    <div className="flex items-center gap-3 text-2xl font-bold text-gray-800 flex-wrap justify-center">
+                                        <span className="bg-white px-3 py-1 rounded shadow-sm text-indigo-600">{groups}</span>
+                                        <span className="text-gray-400">x</span>
+                                        <span className="bg-white px-3 py-1 rounded shadow-sm text-indigo-600">{dotsPerGroup}</span>
+                                        <span className="text-gray-400">=</span>
+                                        <input 
+                                            type="number" 
+                                            value={userAnswer}
+                                            onChange={(e) => setUserAnswer(e.target.value)}
+                                            onKeyDown={handleKeyDown}
+                                            className={`w-20 p-2 text-center border-2 rounded-lg outline-none transition-all ${
+                                                feedback === 'correct' ? 'border-green-500 bg-green-50 text-green-700' :
+                                                feedback === 'wrong' ? 'border-red-500 bg-red-50' :
+                                                'border-indigo-300 focus:border-indigo-500'
+                                            }`}
+                                            placeholder="?"
+                                        />
+                                    </div>
+                                    <div className="mt-4 flex gap-3 w-full">
+                                        <button 
+                                            onClick={checkAnswer}
+                                            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-semibold shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
+                                        >
+                                            Kontrol Et
+                                        </button>
+                                        {feedback && (
+                                            <button 
+                                                onClick={generateNewQuestion}
+                                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition-colors"
+                                                title="Yeni Soru"
+                                            >
+                                                <RefreshCw size={20} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 1. DOMİNO TAŞLARI */}
+                            <div className="bg-gray-100 p-6 rounded-2xl border-2 border-gray-200">
+                                <h3 className="text-gray-600 font-semibold mb-4 flex items-center gap-2">
+                                    <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>
+                                    Domino taşlarındaki noktaları saymak için üzerlerine tıkla!
+                                </h3>
+                                <div className="flex flex-wrap justify-center gap-4 md:gap-8">
+                                    {Array.from({ length: groups }).map((_, gIndex) => {
+                                        const isGroupActive = activeDots[`${gIndex}-0`];
+                                        return (
+                                            <div key={gIndex} className="relative group">
+                                                <div 
+                                                    onClick={() => toggleGroup(gIndex)}
+                                                    className={`w-24 h-36 bg-white rounded-xl shadow-[0_4px_0_0_rgba(0,0,0,0.1)] border-2 flex items-center justify-center hover:translate-y-[-2px] transition-all duration-200 cursor-pointer active:scale-95 ${
+                                                        isGroupActive ? 'border-yellow-400 ring-2 ring-yellow-200' : 'border-gray-300'
+                                                    }`}
+                                                >
+                                                    <div className="grid grid-cols-2 gap-3 p-2">
+                                                        {Array.from({ length: dotsPerGroup }).map((_, dIndex) => {
+                                                            const isActive = activeDots[`${gIndex}-${dIndex}`];
+                                                            return (
+                                                                <button
+                                                                    key={dIndex}
+                                                                    onClick={(e) => toggleDot(e, gIndex, dIndex)}
+                                                                    className={`w-6 h-6 rounded-full border-2 transition-all duration-300 transform scale-100 active:scale-90 ${
+                                                                        isActive 
+                                                                            ? 'bg-yellow-400 border-yellow-500 shadow-[0_0_10px_rgba(250,204,21,0.6)]' 
+                                                                            : 'bg-gray-200 border-gray-300'
+                                                                    }`}
+                                                                    aria-label="Nokta"
+                                                                />
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                                <div className={`absolute -bottom-8 left-0 right-0 text-center font-bold transition-colors ${isGroupActive ? 'text-blue-600' : 'text-gray-300'}`}>
+                                                    {dotsPerGroup}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* 2. SAYI DOĞRUSU */}
+                            <div className="bg-white p-4 rounded-xl border-2 border-dashed border-blue-300 overflow-x-auto">
+                                <h3 className="text-gray-600 font-semibold mb-2 flex items-center gap-2">
+                                    <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span>
+                                    İlerleme Sayı Doğrusunda Nasıl Görünüyor? (Tıkladıkça Zıplayan Oklar)
+                                </h3>
+                                <div 
+                                    ref={containerRef}
+                                    className="min-w-[1200px] h-36 relative flex items-end pb-6"
+                                >
+                                    <svg className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{zIndex: 10}}>
+                                        <defs>
+                                            <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                                                <polygon points="0 0, 6 3, 0 6" fill="#EF4444" />
+                                            </marker>
+                                        </defs>
+
+                                        {jumpPaths.map((pathD, index) => (
+                                            <path 
+                                                key={index}
+                                                d={pathD}
+                                                fill="none"
+                                                stroke="#EF4444"
+                                                strokeWidth="4"
+                                                markerEnd="url(#arrowhead)"
+                                                strokeLinecap="round"
+                                                className="animate-[fadeIn_0.5s_ease-out]"
+                                            />
+                                        ))}
+
+                                        {Array.from({ length: activeGroupCount }).map((_, i) => {
+                                            const startPercent = (i * dotsPerGroup) * (100 / 50); 
+                                            const endPercent = ((i + 1) * dotsPerGroup) * (100 / 50);
+                                            return (
+                                                <text 
+                                                    key={i}
+                                                    x={`${(startPercent + endPercent) / 2}%`} 
+                                                    y="55%" 
+                                                    textAnchor="middle" 
+                                                    fill="#EF4444" 
+                                                    fontSize="12" 
+                                                    fontWeight="bold"
+                                                    className="animate-[fadeIn_0.5s_ease-out]"
+                                                >
+                                                    +{dotsPerGroup}
+                                                </text>
+                                            );
+                                        })}
+                                    </svg>
+
+                                    {/* Tikler */}
+                                    <div className="w-full flex justify-between absolute bottom-0 border-t-2 border-gray-800 pt-1">
+                                        {Array.from({ length: 51 }).map((_, i) => (
+                                            <div key={i} className="flex flex-col items-center relative" style={{ width: '20px' }}>
+                                                <div className={`absolute -top-1 w-0.5 bg-gray-800 ${i % 5 === 0 ? 'h-3' : 'h-1.5'}`}></div>
+                                                <span className={`text-[10px] text-gray-600 font-mono mt-2 ${
+                                                    i === currentTotal ? 'font-bold text-red-600 text-base scale-125 transition-all' : 
+                                                    (i % 5 === 0 ? 'font-bold text-black' : '')
+                                                }`}>
+                                                    {i}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Geri Bildirim */}
+                            {feedback && (
+                                <div className={`p-4 rounded-xl flex items-center justify-center gap-3 text-lg font-bold animate-pulse ${
+                                    feedback === 'correct' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                }`}>
+                                    {feedback === 'correct' ? (
+                                        <React.Fragment>
+                                            <CheckCircle />
+                                            Harika! {groups} tane {dotsPerGroup}, {groups * dotsPerGroup} eder.
+                                        </React.Fragment>
+                                    ) : (
+                                        <React.Fragment>
+                                            <XCircle />
+                                            Tekrar dene! Domino taşlarını sayabilirsin.
+                                        </React.Fragment>
+                                    )}
+                                </div>
+                            )}
+
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
